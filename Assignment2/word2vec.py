@@ -123,7 +123,53 @@ def negSamplingLossAndGradient(
     ### YOUR CODE HERE (~10 Lines)
 
     ### Please use your implementation of sigmoid in here.
+    #print(f"outside word index = {outsideWordIdx}, neg sampled word indices = {negSampleWordIndices}")
+    unique_inds, counts = np.unique(negSampleWordIndices, return_counts=True)
+    #print(f"unique indices = {unique_inds},  counts = {counts}")
+    all_counts = np.array([1] + list(counts))
+    #print(f"all counts = {all_counts}")
 
+    # contruct a matrix whose first row is the outside word vector and remaining rows 
+    # are the unique negative sampled word vectors (negated)
+    U = [outsideVectors[outsideWordIdx]] + [-1*outsideVectors[i] for i in unique_inds]    
+    U = np.vstack(U)
+    #print(f"U = {U}")
+    #print(f"vc = {centerWordVec}")
+
+    # compute dot product with center word vector
+    U_dot_vc = np.dot(U, centerWordVec)
+    #print(f"U dot vc = {U_dot_vc}")
+
+    # compute log of sigmoid of dot products
+    sig_U_dot_vc = sigmoid(U_dot_vc)
+    #print(f"sig(uT.vc) = {sig_U_dot_vc}")
+    log_sigmoid = np.log(sig_U_dot_vc)
+    #print(f"log sigmoid = {log_sigmoid}")
+    #print(f"(1-sig) = {1-sig_U_dot_vc}")
+    #print(f"(1-sig) * all_counts = {np.expand_dims((1-sig_U_dot_vc)*all_counts,-1)}")
+
+    # compute the negative sampling loss (repeated terms in the sum are just multiplied by the count)
+    loss = -np.dot(all_counts, log_sigmoid)
+    #print(f"loss = {loss}") 
+
+    # compute gradient w.r.t. center word
+    one_minus_sigmoid = np.expand_dims((1-sig_U_dot_vc)*all_counts,-1) 
+    gradCenterVec = one_minus_sigmoid * U
+    gradCenterVec = -np.sum(gradCenterVec, axis=0)
+    #print(f"grad vc = {gradCenterVec}")
+
+    #compute gradient w.r.t. outside words (i.e. outside word and unique negative words multiplied by their counts)
+    gradU = np.zeros_like(U) + centerWordVec
+    gradU[0,:] = -gradU[0,:]
+    #print(f"all rows vc = {gradU}")
+    gradU = gradU * one_minus_sigmoid
+    #print(f"grad U = {gradU}")
+    # full gradient matrix for outside words
+    gradOutsideVecs = np.zeros_like(outsideVectors)
+    inds = [outsideWordIdx] + list(unique_inds) 
+    gradOutsideVecs[inds] = gradU
+    #print(f"grad U full = {gradOutsideVecs}")
+     
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
