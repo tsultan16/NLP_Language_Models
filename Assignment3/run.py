@@ -53,7 +53,10 @@ def train(parser, train_data, dev_data, output_path, batch_size=1024, n_epochs=1
     ###     Adam Optimizer: https://pytorch.org/docs/stable/optim.html
     ###     Cross Entropy Loss: https://pytorch.org/docs/stable/nn.html#crossentropyloss
 
+    optimizer = optim.Adam(parser.model.parameters(), lr=lr)
 
+    loss_func = torch.nn.CrossEntropyLoss()
+    
 
     ### END YOUR CODE
 
@@ -106,8 +109,17 @@ def train_for_epoch(parser, train_data, dev_data, optimizer, loss_func, batch_si
             ### Please see the following docs for support:
             ###     Optimizer Step: https://pytorch.org/docs/stable/optim.html#optimizer-step
 
+            # forward pass to get logits
+            logits = parser.model(train_x)
 
+            # compute cross entropy loss
+            loss = loss_func(logits, train_y)
 
+            # backpropagate the loss
+            loss.backward()
+
+            # optimizer step to update parameters
+            optimizer.step()
 
             ### END YOUR CODE
             prog.update(1)
