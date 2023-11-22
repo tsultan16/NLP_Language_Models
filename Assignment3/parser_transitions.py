@@ -122,14 +122,12 @@ def minibatch_parse(sentences, model, batch_size):
 
     # initialize partial parse for each sentence
     partial_parses = [PartialParse(s) for s in sentences]
-    unfinished_parses = partial_parses
     unparsed_sentences = list(range(len(sentences)))
-
     dependencies = [[]] * len(sentences)
 
     while len(unparsed_sentences) > 0:
 
-        # grab mini batch of sentences that have not been completely parsed yet
+        # grab minibatch of sentences that have not been completely parsed yet
         bsize = min(batch_size, len(unparsed_sentences)) 
         minibatch_indices = unparsed_sentences[:bsize]
         minibatch = [partial_parses[ix] for ix in minibatch_indices]
