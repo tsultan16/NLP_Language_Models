@@ -73,7 +73,20 @@ class ParserModel(nn.Module):
         ### 
         ### See the PDF for hints.
 
+        w1 = torch.empty(self.n_features*self.embed_size, self.hidden_size)
+        self.embed_to_hidden_weight = nn.Parameter(nn.init.xavier_uniform_(w1))
 
+        b1 = torch.empty(self.hidden_size)
+        self.embed_to_hidden_bias = nn.Parameter(nn.init.uniform_(b1))
+
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p=self.dropout_prob)
+
+        w2 = torch.empty(self.hidden_size, self.n_classes)
+        self.hidden_to_logits_weight = nn.Parameter(nn.init.xavier_uniform_(w2))
+
+        b2 = torch.empty(self.n_classes)
+        self.hidden_to_logits_bias = nn.Parameter(nn.init.uniform_(b2))
 
 
         ### END YOUR CODE
@@ -107,8 +120,21 @@ class ParserModel(nn.Module):
         ###     View: https://pytorch.org/docs/stable/tensors.html#torch.Tensor.view
         ###     Flatten: https://pytorch.org/docs/stable/generated/torch.flatten.html
 
+        # select the embedding vectors for the given word indices
+        
+        # flatten the batch of word indices
+        original_shape = w.shape
+        w_flattened = w.view(-1)
+        
+        # get all the embeddings by indexing into the rows of embedding matrix
+        all_embeddings = torch.index_select(self.embeddings, 0, w_flattened)
 
+        # reshape back into batch
+        embeddings = all_embeddings.reshape(original_shape + (all_embeddings.shape[-1],))
 
+        # reshape to get concatenated embeddings for each batch
+        x = embeddings.reshape(original_shape[0],-1)
+        
         ### END YOUR CODE
         return x
 
@@ -144,6 +170,17 @@ class ParserModel(nn.Module):
         ###     Matrix product: https://pytorch.org/docs/stable/torch.html#torch.matmul
         ###     ReLU: https://pytorch.org/docs/stable/nn.html?highlight=relu#torch.nn.functional.relu
 
+        # get concatenated embeddings
+        x = self.embedding_lookup(w)
+
+        # compute hidden 
+        h = self.relu(x @ self.embed_to_hidden_weight + self.embed_to_hidden_bias)  
+
+        # apply dropout
+        h = self.dropout(h)
+
+        # compute logits
+        logits = h @ self.hidden_to_logits_weight +  self.hidden_to_logits_bias
 
         ### END YOUR CODE
         return logits
