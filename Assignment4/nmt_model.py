@@ -55,7 +55,7 @@ class NMT(nn.Module):
         self.target_vocab_projection = None
         self.dropout = None
         # For sanity check only, not relevant to implementation
-        self.gen_sanity_check = False
+        self.gen_sanity_check = True
         self.counter = 0
 
         ### YOUR CODE HERE (~9 Lines)
@@ -82,6 +82,17 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Dropout
         ###     Conv1D Layer:
         ###         https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+
+
+        self.post_embed_cnn = nn.Conv1d(in_channels=embed_size, out_channels=embed_size, kernel_size=2, padding='same') 
+        self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True)
+        self.decoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size)
+        self.h_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.c_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.att_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
+        self.combined_output_projection = nn.Linear(3*hidden_size, hidden_size, bias=False)
+        self.target_vocab_projection = nn.Linear(hidden_size, len(vocab.tgt), bias=False)
+        self.dropout = nn.Dropout(dropout_rate)
 
         ### END YOUR CODE
 
@@ -179,6 +190,39 @@ class NMT(nn.Module):
         ###     Tensor Reshape (a possible alternative to permute):
         ###         https://pytorch.org/docs/stable/generated/torch.Tensor.reshape.html
 
+        
+        # get source embeddings 
+        X = self.model_embeddings.source(source_padded) # shape = (src_len, b, e)
+        X = torch.permute(X, (1,2,0)) # change shape to batch first:  (b, e, src_len)
+
+        # pass through cnn layer
+        X = self.post_embed_cnn(X)
+        X = torch.permute(X, (2,0,1)) # revert back to original shape
+
+        # create PackedSequence object (this ensures LSTM avoids computations on padding tokens => faster performance)
+        X = pack_padded_sequence(X, source_lengths, batch_first=False)
+
+        # pass through encoder
+        enc_hiddens, (last_hidden, last_cell) = self.encoder(X)
+        
+        # unpack the PackedSequence object
+        enc_hiddens, lens_unpacked = pad_packed_sequence(enc_hiddens, batch_first=False) # enc_hidden shape: (src_len, b, 2*h)
+        enc_hiddens = torch.permute(enc_hiddens, (1,0,2)) # permute shape to batch first:  (b, src_len, 2*h)
+
+        # concatenate the forward and backward final hidden states and cells (column-wise)
+        forward_last_hidden = last_hidden[0]
+        backward_last_hidden = last_hidden[1]
+        init_decoder_hidden = torch.cat((forward_last_hidden, backward_last_hidden), dim=1)
+
+        forward_last_cell = last_cell[0]
+        backward_last_cell = last_cell[1]
+        init_decoder_cell = torch.cat((forward_last_cell, backward_last_cell), dim=1)
+
+        # project the concatenated hidden state and cell vectors 
+        init_decoder_hidden = self.h_projection(init_decoder_hidden) 
+        init_decoder_cell = self.c_projection(init_decoder_cell) 
+
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
 
         ### END YOUR CODE
 
