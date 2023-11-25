@@ -86,7 +86,7 @@ class NMT(nn.Module):
 
         self.post_embed_cnn = nn.Conv1d(in_channels=embed_size, out_channels=embed_size, kernel_size=2, padding='same') 
         self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True)
-        self.decoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size)
+        self.decoder = nn.LSTMCell(input_size=embed_size+hidden_size, hidden_size=hidden_size)
         self.h_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.c_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.att_projection = nn.Linear(2*hidden_size, hidden_size, bias=False)
@@ -301,7 +301,7 @@ class NMT(nn.Module):
         # iterate over each time step
         for Y_t in torch.split(Y, 1, 0):
             Yt = torch.squeeze(Y_t, 0)
-            Ybar_t = torch.cat((Yt, o_prev), 1)
+            Ybar_t = torch.cat((Yt, o_prev), -1)
             dec_state, o_t, e_t = self.step(Ybar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks) 
             combined_outputs.append(o_t)
             o_prev = o_t
@@ -365,6 +365,16 @@ class NMT(nn.Module):
         ###     Tensor Squeeze:
         ###         https://pytorch.org/docs/stable/torch.html#torch.squeeze
 
+       
+        # run decoder LSTM cell for one time step
+        dec_state = self.decoder(Ybar_t, dec_state)
+        dec_hidden, dec_cell = dec_state
+
+        # compute attention scores
+        dec_hidden = torch.unsqueeze(dec_hidden, -1)
+        e_t = torch.bmm(enc_hiddens_proj, dec_hidden)
+        e_t = torch.squeeze(e_t, -1)
+        dec_hidden = torch.squeeze(dec_hidden, -1)
 
         ### END YOUR CODE
 
@@ -400,6 +410,18 @@ class NMT(nn.Module):
         ###     Tanh:
         ###         https://pytorch.org/docs/stable/torch.html#torch.tanh
 
+        # apply softmax to attention scores
+        alpha_t = nn.Softmax(dim=1)(e_t)
+        # compute attention output vector
+        alpha_t = torch.unsqueeze(alpha_t, 1)
+        a_t = torch.bmm(alpha_t, enc_hiddens)
+        a_t = torch.squeeze(a_t, 1)
+        # concatenate
+        U_t = torch.cat((dec_hidden, a_t), dim=1)
+        # apply projection
+        V_t = self.combined_output_projection(U_t)
+        # compute combined output of decoder step  
+        O_t = self.dropout(torch.tanh(V_t))
 
         ### END YOUR CODE
 
