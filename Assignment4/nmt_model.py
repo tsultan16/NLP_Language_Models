@@ -292,7 +292,22 @@ class NMT(nn.Module):
         ###     Tensor Stacking:
         ###         https://pytorch.org/docs/stable/torch.html#torch.stack
 
+        # apply attention project layer to enc_hiddens
+        enc_hiddens_proj = self.att_projection(enc_hiddens)
 
+        # get embeddings for the target sentences
+        Y = self.model_embeddings.target(target_padded)
+
+        # iterate over each time step
+        for Y_t in torch.split(Y, 1, 0):
+            Yt = torch.squeeze(Y_t, 0)
+            Ybar_t = torch.cat((Yt, o_prev), 1)
+            dec_state, o_t, e_t = self.step(Ybar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks) 
+            combined_outputs.append(o_t)
+            o_prev = o_t
+
+        # stack up the combines outputs from all the time steps
+        combined_outputs = torch.stack(combined_outputs, dim=0)   
 
         ### END YOUR CODE
 
