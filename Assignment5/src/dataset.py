@@ -168,7 +168,37 @@ class CharCorruptionDataset(Dataset):
 
     def __getitem__(self, idx):
         # TODO [part e]: see spec above
-        raise NotImplementedError
+
+        # get the sentence
+        document = self.data[idx]
+
+        # apply random truncation
+        trunc_len = min(random.randint(4,int(self.block_size*7/8)), len(document))
+        document_trunc = document[:trunc_len]
+        
+        # draw random number from normal distribution with mean=1/4 truncated document length and stdev=1/20 truncated document length 
+        doc_len = len(document_trunc)
+        mask_len = min(int(random.gauss(0.25*doc_len, 0.05*doc_len)), int(doc_len/2))
+        mask_start = random.randint(0, doc_len-mask_len)
+
+        # break into three substrings
+        prefix = document_trunc[:mask_start]
+        masked_content = document_trunc[mask_start:mask_start+mask_len]
+        suffix = document_trunc[mask_start+mask_len:]
+
+        pad_len = self.block_size - (len(document_trunc) + 2)
+        masked_string = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content + self.PAD_CHAR*pad_len
+
+        # create input and output pair
+        x = masked_string[:-1]
+        y = masked_string[1:]
+        
+        # encode the input and output characters into indexed token sequences
+        x_enc = torch.tensor([self.stoi[c] for c in x] ,dtype=torch.long)
+        y_enc = torch.tensor([self.stoi[c] for c in y] ,dtype=torch.long)
+
+        return x_enc, y_enc
+
 
 """
 Code under here is strictly for your debugging purposes; feel free to modify
