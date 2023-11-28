@@ -75,7 +75,14 @@ if args.variant == 'vanilla':
 
 elif args.variant == 'perceiver':
     # set mconf.perceiver, and mconf.bottleneck_dim parameters appropriately.
-    pass # [part g] Make some other model here
+    # [part g] Make some other model here
+    mconf.perceiver = True
+    mconf.bottleneck_dim = args.bottleneck_dim
+    model = model = model.GPT(mconf)
+    # move model to GPU
+    model = model.to(device)
+
+
 else:
     raise ValueError("Unknown model variant")
 
