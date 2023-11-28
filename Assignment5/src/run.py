@@ -112,8 +112,6 @@ if args.function == 'pretrain':
     # save the trained model
     torch.save(model.state_dict(), args.writing_params_path)
 
-
-    raise NotImplementedError
 elif args.function == 'finetune':
     assert args.writing_params_path is not None
     assert args.finetune_corpus_path is not None
@@ -182,7 +180,6 @@ elif args.function == 'finetune':
  
     # save the trained model
     torch.save(model.state_dict(), args.writing_params_path)
-
 
 elif args.function == 'evaluate':
     assert args.outputs_path is not None
