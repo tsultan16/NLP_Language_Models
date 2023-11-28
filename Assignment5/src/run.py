@@ -100,6 +100,19 @@ if args.function == 'pretrain':
     # final_tokens=200*len(pretrain_dataset)*block_size
     # num_workers=4
     # writer=writer 
+
+    # intialize trainer 
+    tconf = trainer.TrainerConfig(max_epochs=650, batch_size=128, learning_rate=args.pretrain_lr,
+                    lr_decay=True, warmup_tokens=512*20, final_tokens=200*len(pretrain_dataset)*block_size,
+                    num_workers=4, writer=writer)        
+
+    trainer = trainer.Trainer(model, pretrain_dataset, None, tconf)
+    trainer.train()
+
+    # save the trained model
+    torch.save(model.state_dict(), args.writing_params_path)
+
+
     raise NotImplementedError
 elif args.function == 'finetune':
     assert args.writing_params_path is not None
@@ -137,26 +150,38 @@ elif args.function == 'finetune':
     #     You can use the args.reading_params_path flag to switch between the
     #     number of epochs for each case.
 
+    # Make the name dataset
+    name_dataset = dataset.NameDataset(pretrain_dataset,
+        open(args.finetune_corpus_path, encoding='utf-8').read())
 
-    ###############################
+    ################################
     # finetuning without pretraining
-    ###############################
+    ################################
     if args.reading_params_path is None:
 
-        # Make the name dataset
-        name_dataset = dataset.NameDataset(pretrain_dataset,
-            open(args.finetune_corpus_path, encoding='utf-8').read())
-
-        # intialize trainer 
         tconf = trainer.TrainerConfig(max_epochs=75, batch_size=256, learning_rate=args.finetune_lr,
-                      lr_decay=True, warmup_tokens=512*20, final_tokens=200*len(name_dataset)*block_size,
+                      lr_decay=True, warmup_tokens=512*20, final_tokens=200*len(pretrain_dataset)*block_size,
                       num_workers=4, writer=writer)        
 
-        trainer = trainer.Trainer(model, name_dataset, None, tconf)
-        trainer.train()
+
+    #############################
+    # finetuning with pretraining
+    #############################
+    else:
+        # load a pretrained model
+        model.load_state_dict(torch.load(args.reading_params_path))
+
+        tconf = trainer.TrainerConfig(max_epochs=10, batch_size=256, learning_rate=args.finetune_lr,
+                      lr_decay=True, warmup_tokens=512*20, final_tokens=200*len(pretrain_dataset)*block_size,
+                      num_workers=4, writer=writer)        
+
+
+    # intialize trainer for finetuning 
+    trainer = trainer.Trainer(model, name_dataset, None, tconf)
+    trainer.train()
  
-        # save the trained model
-        torch.save(model.state_dict(), args.writing_params_path)
+    # save the trained model
+    torch.save(model.state_dict(), args.writing_params_path)
 
 
 elif args.function == 'evaluate':
