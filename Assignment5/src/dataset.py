@@ -177,18 +177,27 @@ class CharCorruptionDataset(Dataset):
         document_trunc = document[:trunc_len]
         
         # draw random number from normal distribution with mean=1/4 truncated document length and stdev=1/10 truncated document length 
+        # mask length bounded within (1, 0.9*document length)
         doc_len = len(document_trunc)
-        #mask_len = min(int(random.gauss(0.25*doc_len, 0.1*doc_len)), int(doc_len*0.6))
-        mask_len = int(random.gauss(0.25*doc_len, 0.1*doc_len))
-        mask_start = random.randint(0, doc_len-mask_len)
+        random_normal_len = int(random.gauss(0.25*doc_len, 0.1*doc_len))
+        mask_len = min(max(0, random_normal_len), int(0.8*doc_len))
+        mask_start = random.randint(0, max(0,doc_len-mask_len-1))
+
+        #print(f"docu length = {doc_len}, mask length = {mask_len}, mask start = {mask_start}")
 
         # break into three substrings
         prefix = document_trunc[:mask_start]
         masked_content = document_trunc[mask_start:mask_start+mask_len]
         suffix = document_trunc[mask_start+mask_len:]
 
-        pad_len = self.block_size - (len(document_trunc) + 2)
-        masked_string = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content + self.PAD_CHAR*pad_len
+        #print(f"prefix len = {len(prefix)}, masked content len = {len(masked_content)}, suffix len = {len(suffix)}, tot = {len(prefix)+len(masked_content)+len(suffix)}")
+ 
+        pad_len = self.block_size - (len(document_trunc) + 2) 
+        masked_string = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content 
+        #print(f"masked string len = {len(masked_string)}, pad len = {pad_len}")
+
+        masked_string = masked_string + self.PAD_CHAR*pad_len
+        #print(f"padded masked string len = {len(masked_string)}")
 
         # create input and output pair
         x = masked_string[:-1]
@@ -197,6 +206,11 @@ class CharCorruptionDataset(Dataset):
         # encode the input and output characters into indexed token sequences
         x_enc = torch.tensor([self.stoi[c] for c in x] ,dtype=torch.long)
         y_enc = torch.tensor([self.stoi[c] for c in y] ,dtype=torch.long)
+
+        if(len(x_enc) != self.block_size-1):
+            raise RuntimeError(f"Error! x_enc length invalied: {len(x_enc)}")
+        if(len(y_enc) != self.block_size-1):
+            raise RuntimeError(f"Error! y_enc input length invalied: {len(y_enc)}")
 
         return x_enc, y_enc
 
