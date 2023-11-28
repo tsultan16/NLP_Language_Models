@@ -176,9 +176,10 @@ class CharCorruptionDataset(Dataset):
         trunc_len = min(random.randint(4,int(self.block_size*7/8)), len(document))
         document_trunc = document[:trunc_len]
         
-        # draw random number from normal distribution with mean=1/4 truncated document length and stdev=1/20 truncated document length 
+        # draw random number from normal distribution with mean=1/4 truncated document length and stdev=1/10 truncated document length 
         doc_len = len(document_trunc)
-        mask_len = min(int(random.gauss(0.25*doc_len, 0.05*doc_len)), int(doc_len/2))
+        #mask_len = min(int(random.gauss(0.25*doc_len, 0.1*doc_len)), int(doc_len*0.6))
+        mask_len = int(random.gauss(0.25*doc_len, 0.1*doc_len))
         mask_start = random.randint(0, doc_len-mask_len)
 
         # break into three substrings
