@@ -102,19 +102,19 @@ with open('WordPiece_tokenizer.pkl', 'rb') as file:
     tokenizer = pickle.load(file) 
 
 # load pre-encoded sequences (~2M sequences)
-with open('dataset_encoded_1M', 'rb') as file:
+with open('dataset_encoded_1', 'rb') as file:
     dataset_encoded = pickle.load(file)
 
 print(f"Num encoded sequences = {len(dataset_encoded)}")
 
 # create dataset
 block_size = 96
-batch_size = 32
+batch_size = 64
 
 # truncate sequences to block_size-1
 
 train_dataset = BERTDataset(dataset_encoded, tokenizer, block_size=block_size)
-train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=False, num_workers=1)  # set pin_memory for faster pre-fetching 
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=False, num_workers=0)  # set pin_memory for faster pre-fetching 
 print(f"Total number of batches: {len(train_dataloader)}")
 
 
@@ -186,9 +186,6 @@ for epoch in range(max_iters):
         # compute cross entropy loss (i.e. average negative log likelihood)
         loss = F.cross_entropy(logits, yb, ignore_index=-100)
 
-        # exponential moving average loss
-        smoothed_loss = 0.9 * smoothed_loss + 0.1 * loss
-
         # reset parameter gradients
         optimizer.zero_grad(set_to_none=True) 
         # backward pass
@@ -196,6 +193,9 @@ for epoch in range(max_iters):
         # optimizer step
         optimizer.step()
 
+        # exponential moving average loss (Important: don't accumulate the loss directly, accumulate loss.item(), otherwise MEMORY LEAK as 
+        # all the old loss tensors will remain in memory!! )
+        smoothed_loss = 0.9 * smoothed_loss + 0.1 * loss.item()
         pbar.set_description(f"Epoch {epoch + 1}, Batch Loss: {loss:.3f}, Moving avg. Loss: {smoothed_loss:.3f}")   
     
     # save checkpoint 
