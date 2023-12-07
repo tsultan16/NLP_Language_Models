@@ -38,23 +38,15 @@ class BERTDataset(Dataset):
         s = self.get_corpus_sentence(idx)
         # truncate to block_size-1
         s = s[:self.block_size-1] 
-        s_len = len(s)
-        
+
         # replace tokens randomly
         s, label = self.replace_tokens(s)
-        # append the CLS token at the beginning of sentence
-        s = [self.tokenizer.cls_token_id()] + s
-        # apply padding
-        pad_len = max(0,self.block_size-s_len-1)
-        s = s + [self.tokenizer.pad_token_id()]*pad_len
-        label = [-100] + label + [-100]*pad_len
-        # create attention mask which has 0's at positions of pad tokens and 1's everywhere else 
-        attention_mask = [1]*(self.block_size-pad_len) + [0]*pad_len       
 
-        # convert to torch tensors
-        s = torch.tensor(s)
-        label = torch.tensor(label)
-        attention_mask = torch.tensor(attention_mask)
+        # append the CLS token at the beginning of sentence and apply padding
+        pad_len = max(0,self.block_size-len(s)-1)
+        s = torch.cat([torch.tensor([self.tokenizer.cls_token_id()]), s, torch.full((pad_len,), self.tokenizer.pad_token_id())])
+        label = torch.cat([torch.tensor([-100]), label,  torch.full((pad_len,),-100)])    
+        attention_mask = torch.cat([torch.ones(self.block_size-pad_len), torch.zeros(pad_len)])
 
         # Note: Unlike the original BERT, we are not returning a pair of sentences, so we
         # don't need to return segment labels or next_sentence label 
@@ -64,23 +56,27 @@ class BERTDataset(Dataset):
     # randomly replace tokens with mlm_prob probability
     def replace_tokens(self, s):
         # the labels for a masked token is the original token index and -100 for non-masked tokens
-        label = [-100] * len(s)
-        for i,t in enumerate(s):
-            p = random.random()    
-            if p < self.mlm_prob:
-                p = p/self.mlm_prob
-                # replace with masked token with 80% probability
-                if p < 0.8:
-                    s[i] = self.tokenizer.mask_token_id()        
+        s = torch.tensor(s, dtype=torch.long)
+        label = torch.full_like(s, -100)
+        mask = torch.rand(len(s)) < self.mlm_prob # mask for replacing tokens
+        selected_idx = mask.nonzero(as_tuple=False).flatten()
+        num_masked = int(0.8* len(selected_idx))
+        num_replaced = int(0.1* len(selected_idx))
 
-                elif p < 0.9:
-                    # replace with random token with 10% probability 
-                    s[i] = random.randrange(self.vocab_size)
-                
-                # Note: for all three cases, i.e. token getting replaced by mask token, token getting replaced
-                # by another random token or token not getting replaced, we want to predict the actual word as our target label 
-                label[i] = t
+        # shuffle the selcted indices
+        shuffled_idx = selected_idx[torch.randperm(len(selected_idx))]
+        # make a copy of original tokens before masking
+        s_original = s[shuffled_idx].clone()
+        # replace with mask tokens
+        mask_idx = shuffled_idx[:num_masked]
+        s[mask_idx] = self.tokenizer.mask_token_id()
 
+        # replace with random tokens
+        replace_idx = shuffled_idx[num_masked:num_masked+num_replaced]
+        s[replace_idx] = torch.randint(self.vocab_size, (num_replaced,))
+        
+        # set labels
+        label[shuffled_idx] = s_original
         return s, label
 
 
@@ -106,7 +102,7 @@ with open('WordPiece_tokenizer.pkl', 'rb') as file:
     tokenizer = pickle.load(file) 
 
 # load pre-encoded sequences (~2M sequences)
-with open('dataset_encoded_1', 'rb') as file:
+with open('dataset_encoded_1M', 'rb') as file:
     dataset_encoded = pickle.load(file)
 
 print(f"Num encoded sequences = {len(dataset_encoded)}")
@@ -114,24 +110,28 @@ print(f"Num encoded sequences = {len(dataset_encoded)}")
 # create dataset
 block_size = 96
 batch_size = 32
+
+# truncate sequences to block_size-1
+
 train_dataset = BERTDataset(dataset_encoded, tokenizer, block_size=block_size)
-train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=1)  # set pin_memory for faster pre-fetching 
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=False, num_workers=1)  # set pin_memory for faster pre-fetching 
 print(f"Total number of batches: {len(train_dataloader)}")
+
 
 
 # model hyperparameters
 embedding_dim = 384
 head_size = embedding_dim
-num_heads = 4 #12
-num_blocks = 1 #8
+num_heads = 12
+num_blocks = 8
 dropout_rate = 0.2
-max_iters = 1
+max_iters = 5
 learning_rate = 1e-4
 smoothed_loss = 0.0
 device = 'cuda' if torch.cuda.is_available() else 'cpu' 
 trained_epochs = 0
 
-load_pretrained = False
+load_pretrained = False # load pre-trained model from checkpoint
 
 # instantiate model
 if(load_pretrained):
@@ -204,9 +204,3 @@ for epoch in range(max_iters):
 
 
 print(f"Training done!")
-
-
-
-
-
-
