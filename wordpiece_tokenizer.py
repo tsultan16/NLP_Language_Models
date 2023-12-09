@@ -14,7 +14,7 @@ random.seed(1234)
 
 
 class WordPieceTokenizer():
-    def __init__(self, cleaning=False, max_subword_len=20):
+    def __init__(self, cleaning=False, max_subword_len=12):
         self.cleaning = cleaning
         self.vocab = []
         self.word2int = {}
@@ -108,7 +108,7 @@ class WordPieceTokenizer():
                     # apply penalty to pairs that exceed max_subword_len 
                     # or splits containing numeric characters so they won't get merged
                     if (len(split[i]+ split[i+1]) > self.max_subword_len) or re.search(r'\d', split[i]) or re.search(r'\d', split[i+1]):
-                        pair_freqs[pair] =0
+                        pair_freqs[pair] = 0
                     else:
                         pair_freqs[pair] += freq
 
