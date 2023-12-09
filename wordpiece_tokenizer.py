@@ -5,7 +5,7 @@
 """
 
 from collections import defaultdict
-import string
+import string, re
 import unicodedata
 from multiprocess import Pool
 from tqdm import tqdm
@@ -14,7 +14,8 @@ random.seed(1234)
 
 
 class WordPieceTokenizer():
-    def __init__(self):
+    def __init__(self, cleaning=False, max_subword_len=20):
+        self.cleaning = cleaning
         self.vocab = []
         self.word2int = {}
         self.int2word = {}
@@ -25,8 +26,10 @@ class WordPieceTokenizer():
         self.cls_token = "[CLS]"
         self.sep_token = "[SEP]"
         
+        self.max_subword_len = max_subword_len
         self.invalid_chars = ('*', '~', '_', '^', '`', '+', '\\', '[', ']', '<', '>')
         self.max_vocab_size = None
+
         
 
     def mask_token_id(self):
@@ -48,14 +51,14 @@ class WordPieceTokenizer():
         return len(self.vocab)
     
     def clean_sentence(self, s):
-        # removes all control characters and invalid characters, replaces multiple adjacent whitespace with single whitespace
-    
-        #s = "".join(ch for ch in s if unicodedata.category(ch)[0] != 'C' and ch not in self.invalid_chars) 
-        #s = " ".join(s.split())
-        
-        # remove all non-letter characters
-        s = "".join(ch for ch in s if unicodedata.category(ch)[0]=='L' or unicodedata.category(ch)=='Zs') 
-        s = " ".join(s.split())
+        if self.cleaning:
+            # removes all control characters and invalid characters, replaces multiple adjacent whitespace with single whitespace
+            s = "".join(ch for ch in s if unicodedata.category(ch)[0] != 'C' and ch not in self.invalid_chars) 
+            s = " ".join(s.split())
+            
+            # remove all non-letter characters
+            #s = "".join(ch for ch in s if unicodedata.category(ch)[0]=='L' or unicodedata.category(ch)=='Zs') 
+            #s = " ".join(s.split())        
         return s
 
     # generates wordpiece vocabulary of subwords from a given corpus
@@ -101,7 +104,14 @@ class WordPieceTokenizer():
                 for i in range(len(split)-1):
                     pair = (split[i], split[i+1])
                     letter_freqs[split[i]] += freq
-                    pair_freqs[pair] += freq
+
+                    # apply penalty to pairs that exceed max_subword_len 
+                    # or splits containing numeric characters so they won't get merged
+                    if (len(split[i]+ split[i+1]) > self.max_subword_len) or re.search(r'\d', split[i]) or re.search(r'\d', split[i+1]):
+                        pair_freqs[pair] =0
+                    else:
+                        pair_freqs[pair] += freq
+
                 letter_freqs[split[-1]] += freq
 
             scores = {pair: freq/(letter_freqs[pair[0]]*letter_freqs[pair[1]]) for pair,freq in pair_freqs.items()}
